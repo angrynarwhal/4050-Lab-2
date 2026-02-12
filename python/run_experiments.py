@@ -231,8 +231,8 @@ def main():
                         help="Directory containing graph data files")
     parser.add_argument("--sizes", default="tiny,small",
                         help="Comma-separated list of dataset sizes to use")
-    parser.add_argument("--exercises", default="1,2,3,4,5",
-                        help="Comma-separated list of exercises to run (1-5)")
+    parser.add_argument("--exercises", default="1,2,3,4,5,6",
+                        help="Comma-separated list of exercises to run (1-6)")
     args = parser.parse_args()
 
     sizes = [s.strip() for s in args.sizes.split(",")]
@@ -273,6 +273,26 @@ def main():
 
     if 5 in exercises:
         run_exercise_5(args.data_dir, default_size)
+
+    if 6 in exercises:
+        print(f"\n{'=' * 60}")
+        print("EXERCISE 6: Choose Your Own Network")
+        print("=" * 60)
+        print()
+        print("Exercise 6 uses a separate script with a report template.")
+        print("To run it:")
+        print()
+        print("  1. Build your custom network:")
+        print("     cd ../scripts")
+        print("     python3 build_graph.py --country \"China\" "
+              "--max-nodes 5000 --output my_network")
+        print()
+        print("  2. Edit python/explore_network.py — set MY_NETWORK "
+              "and MY_DESCRIPTION")
+        print()
+        print("  3. Run the analysis:")
+        print("     python3 explore_network.py")
+        print()
 
     print(f"\n{'=' * 60}")
     print("All experiments complete!")

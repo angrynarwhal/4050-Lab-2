@@ -120,7 +120,8 @@ python3 clustering.py ../data/small_nodes.csv ../data/small_edges.csv --clusters
 │   ├── mst_algorithms.py           # Kruskal's, Prim's, Union-Find
 │   ├── cut_properties.py           # Red Rule / Blue Rule demonstrations
 │   ├── clustering.py               # MST-based k-clustering
-│   └── run_experiments.py          # Guided experiment runner
+│   ├── run_experiments.py          # Guided experiment runner (Exercises 1-5)
+│   └── explore_network.py          # Exercise 6: Choose Your Own Network
 ├── c/
 │   ├── mst.c                       # C implementations of MST algorithms
 │   ├── union_find.c                # Union-Find with path compression + union by rank
@@ -371,19 +372,69 @@ Record:
 2. Path compression changes the tree structure during `find()`. Draw the before and after for a chain of 5 elements: 0→1→2→3→4 (where 4 is root). What does path compression do?
 3. The inverse Ackermann function α(n) grows incredibly slowly (α(2^65536) = 4). Why does this matter for practical MST computation?
 
-### Exercise 6: Real-World Analysis
+### Exercise 6: Choose Your Own Network
 
-Using the `uk_small` dataset (UK-connected entities):
+In this exercise you choose your own slice of the ICIJ database, run the full analysis pipeline, and compare your network to the Panama default.
+
+**Step 1: Pick a network.** Choose ONE of these approaches:
 
 ```bash
-python3 clustering.py ../data/uk_small_nodes.csv ../data/uk_small_edges.csv --clusters 5 --analyze
+cd scripts
+
+# Option A: A different country
+python3 build_graph.py --country "China" --max-nodes 5000 --output my_network
+
+# Option B: A different jurisdiction
+python3 build_graph.py --jurisdiction "British Virgin Islands" --max-nodes 5000 --output my_network
+
+# Option C: A specific intermediary (law firm)
+python3 build_graph.py --intermediary "Appleby" --max-nodes 5000 --output my_network
+
+# Option D: A different data source
+python3 build_graph.py --source "Paradise Papers" --max-nodes 5000 --output my_network
+
+# Option E: Combine filters
+python3 build_graph.py --country "Russia" --jurisdiction "Panama" --max-nodes 5000 --output my_network
 ```
 
-**Questions:**
+**Step 2: Configure the template.** Open `python/explore_network.py` and edit the `CONFIGURATION` section at the top:
+- Set `MY_NETWORK` to the `--output` name you used above
+- Write a 2-3 sentence description of what you chose and why
 
-1. Identify the intermediary (law firm / registered agent) that appears most frequently in the largest cluster. What role does this intermediary play in the network structure?
-2. Compare the MST of the UK subgraph with the Panama subgraph. Which has higher average edge weight? What does this suggest about the density of connections?
-3. If you were to add a new edge to the MST (creating a cycle), which existing MST edge could be removed by the Red Rule? What would this edge swap mean in terms of the offshore network?
+**Step 3: Run the analysis.**
+
+```bash
+cd python
+python3 explore_network.py
+```
+
+This will automatically:
+- Profile your network (degree distribution, node types, jurisdictions)
+- Build MSTs using both Kruskal's and Prim's
+- Verify Blue Rule and Red Rule properties
+- Run clustering for k = 3, 5, 10, 20 with detailed composition analysis
+- Compare Union-Find performance across all 4 configurations
+- Compare every metric side-by-side against the Panama default
+- Print a report template for your submission
+
+**Questions (fill in the template that prints at the end):**
+
+1. **Network Structure**: How does your network differ structurally from Panama? Consider density, degree distribution, node types, and jurisdictions.
+2. **MST Comparison**: Which network has higher average MST edge weight? What does this say about connection strength? Did algorithm performance differ?
+3. **Cut Properties**: What was the most interesting jurisdictional cut in your network? What does the minimum crossing edge represent?
+4. **Clustering**: Were clusters balanced or skewed? What real-world groupings do they correspond to? How does this compare to Panama's clustering?
+5. **Surprising Finding**: What did the MST reveal that raw edge counts wouldn't show?
+
+**Some interesting networks to try:**
+
+| Filter | Why it's interesting |
+|--------|---------------------|
+| `--country "Russia"` | Large offshore presence, sanctions-era structures |
+| `--country "China" --jurisdiction "BVI"` | Massive BVI usage for round-tripping capital |
+| `--intermediary "Appleby"` | Paradise Papers firm, different client profile than Mossack Fonseca |
+| `--source "Pandora Papers"` | Newest leak (2021), different jurisdictions than Panama Papers |
+| `--country "United States"` | Domestic offshore usage patterns |
+| `--jurisdiction "Seychelles"` | Popular alternative to Panama/BVI |
 
 ## Implementing Your Own Extensions
 
@@ -412,11 +463,12 @@ Find the MST whose total weight is second-smallest. This can be done in O(E log 
 
 Place all of your submission documents in the [./lab2_submission](lab2_submission) folder. You will submit a zip file of that directory in Canvas.
 
-1. **Experimental data** from all exercises (tables filled in, CSV exports, or screenshots)
+1. **Experimental data** from Exercises 1-5 (tables filled in, CSV exports, or screenshots)
 2. **Written answers** to all questions (~1-2 paragraphs each)
 3. **Analysis** of clustering results with at least one visualization
-4. **Code** for any modifications you made
-5. **Reflection** (~2 paragraphs): What surprised you about the structure of the Panama Papers graph? How did the MST reveal structure that raw edge lists don't?
+4. **Exercise 6 report** — completed template from `explore_network.py` output, including your network choice, comparison data, and answers to all 5 questions
+5. **Code** for any modifications you made
+6. **Reflection** (~2 paragraphs): What surprised you about the structure of the Panama Papers graph? How did the MST reveal structure that raw edge lists don't?
 
 ## Additional Resources
 
