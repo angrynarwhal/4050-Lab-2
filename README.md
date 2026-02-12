@@ -257,6 +257,9 @@ cd c
 make
 ./mst ../data/tiny_nodes.csv ../data/tiny_edges.csv
 ./mst ../data/small_nodes.csv ../data/small_edges.csv
+./mst ../data/medium_nodes.csv ../data/medium_edges.csv
+./mst ../data/uk_small_nodes.csv ../data/uk_small_edges.csv
+
 ```
 
 Run both algorithms on progressively larger Panama Papers subgraphs:
