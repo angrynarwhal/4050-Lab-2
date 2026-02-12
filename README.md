@@ -255,10 +255,17 @@ PRIM(G, start):
 ```bash
 cd c
 make
-./mst ../data/tiny_nodes.csv ../data/tiny_edges.csv
-./mst ../data/small_nodes.csv ../data/small_edges.csv
-./mst ../data/medium_nodes.csv ../data/medium_edges.csv
-./mst ../data/uk_small_nodes.csv ../data/uk_small_edges.csv
+
+# Exercise 1: Kruskal vs Prim side-by-side
+./mst ../data/small_nodes.csv ../data/small_edges.csv --compare
+./mst ../data/medium_nodes.csv ../data/medium_edges.csv --compare
+
+# Exercise 5: Union-Find modes (unchanged)
+./mst ../data/small_nodes.csv ../data/small_edges.csv --instrument
+
+# Individual runs
+./mst ../data/medium_nodes.csv ../data/medium_edges.csv --kruskal
+./mst ../data/medium_nodes.csv ../data/medium_edges.csv --prim
 
 ```
 
