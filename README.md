@@ -252,6 +252,13 @@ PRIM(G, start):
 
 ### Exercise 1: MST Construction and Comparison
 
+```bash
+cd c
+make
+./mst ../data/tiny_nodes.csv ../data/tiny_edges.csv
+./mst ../data/small_nodes.csv ../data/small_edges.csv
+```
+
 Run both algorithms on progressively larger Panama Papers subgraphs:
 
 | Network | Nodes | Edges | Kruskal Time | Prim Time | MST Weight |
