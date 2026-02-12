@@ -47,25 +47,26 @@ class UnionFind:
         self.union_calls = 0
 
     def find(self, x):
-        """Find the root representative of x's set."""
+        """Find the root representative of x's set (iterative)."""
         self.find_calls += 1
         path_len = 0
 
+        # Phase 1: Walk to root
+        root = x
+        while self.parent[root] != root:
+            root = self.parent[root]
+            path_len += 1
+
+        # Phase 2: Path compression (if enabled) — flatten all nodes to root
         if self.path_compression:
-            # Recursive path compression
-            if self.parent[x] != x:
-                path_len += 1
-                self.parent[x] = self.find(self.parent[x])
-            self.total_path_length += path_len
-            return self.parent[x]
-        else:
-            # No compression — follow pointers to root
-            root = x
-            while self.parent[root] != root:
-                root = self.parent[root]
-                path_len += 1
-            self.total_path_length += path_len
-            return root
+            curr = x
+            while self.parent[curr] != root:
+                next_node = self.parent[curr]
+                self.parent[curr] = root
+                curr = next_node
+
+        self.total_path_length += path_len
+        return root
 
     def union(self, x, y):
         """
