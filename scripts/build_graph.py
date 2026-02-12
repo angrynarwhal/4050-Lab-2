@@ -355,101 +355,195 @@ def extract_largest_connected_component(node_ids, edge_list):
 
 def build_subgraph(nodes, all_edges, target_nodes, max_nodes, seed=42):
     """
-    Build a dense, connected subgraph using BFS expansion from high-degree seeds.
+    Build a dense, connected subgraph using BFS expansion + bipartite projection.
 
-    Strategy:
-      1. Build adjacency list from all edges restricted to target_nodes
-      2. Find highest-degree nodes as seeds (typically intermediaries)
-      3. BFS-expand from seeds until max_nodes is reached
-      4. Collect ALL edges between reached nodes (not just BFS tree edges)
+    The ICIJ graph is inherently bipartite: officers connect to entities,
+    intermediaries connect to entities, etc. Direct officer↔officer or
+    entity↔entity edges are rare. This means BFS expansion produces tree-like
+    subgraphs with few cycles — useless for MST exercises.
 
-    This guarantees the result is connected and has many more edges than nodes
-    (i.e., contains cycles), which is essential for MST exercises.
+    Solution: after BFS expansion, add PROJECTION EDGES. Two visited nodes
+    get a projection edge if they share a common neighbor in the full graph
+    (even if that neighbor is outside the visited set). This is the standard
+    bipartite graph projection and creates natural clusters:
+      - Entities sharing an intermediary cluster together
+      - Officers connected to the same entity cluster together
+
+    Edge weights for projections: higher (weaker) than direct edges, scaled
+    inversely by the number of shared neighbors (more shared = stronger link).
     """
     random.seed(seed)
 
-    print(f"    Building adjacency list for {len(target_nodes):,} target nodes...")
+    print(f"    Building full adjacency for {len(target_nodes):,} target nodes...")
 
-    # Build adjacency list restricted to target_nodes
-    # Store full edge info for later weight computation
-    adj = defaultdict(set)
-    edge_lookup = {}  # (min_id, max_id) -> rel_type
+    # ---- Step 1: Build adjacency within target set (for BFS) ----
+    adj_target = defaultdict(set)
+    edge_lookup = {}
     target_set = set(target_nodes)
 
     for start, end, rel_type, link in all_edges:
-        if start in target_set and end in target_set:
-            if start != end:  # skip self-loops
-                adj[start].add(end)
-                adj[end].add(start)
-                ekey = (min(start, end), max(start, end))
-                # Keep the first rel_type we see for each edge pair
-                if ekey not in edge_lookup:
-                    edge_lookup[ekey] = rel_type
+        if start in target_set and end in target_set and start != end:
+            adj_target[start].add(end)
+            adj_target[end].add(start)
+            ekey = (min(start, end), max(start, end))
+            if ekey not in edge_lookup:
+                edge_lookup[ekey] = rel_type
 
-    # Count how many target nodes actually have edges
-    nodes_with_edges = {n for n in target_set if len(adj[n]) > 0}
-    print(f"    Nodes with edges in target set: {len(nodes_with_edges):,}")
-    print(f"    Edges in target set: {len(edge_lookup):,}")
+    nodes_with_edges = {n for n in target_set if len(adj_target[n]) > 0}
+    print(f"    Nodes with internal edges: {len(nodes_with_edges):,}")
+    print(f"    Direct edges: {len(edge_lookup):,}")
 
     if len(nodes_with_edges) == 0:
         print("    Warning: No edges found among target nodes.")
         return {}, []
 
-    # Find seed nodes: highest degree nodes in the target set
-    # Prefer intermediaries as they tend to be hubs connecting many entities
-    degree_list = [(nid, len(adj[nid])) for nid in nodes_with_edges]
-    degree_list.sort(key=lambda x: -x[1])
+    # ---- Step 2: BFS expansion from highest-degree seed ----
+    # Start from ONE seed to guarantee a connected subgraph.
+    # Only add additional seeds if BFS exhausts its component before max_nodes.
+    degree_list = sorted(
+        [(nid, len(adj_target[nid])) for nid in nodes_with_edges],
+        key=lambda x: -x[1]
+    )
 
-    # Pick top seeds, mixing types if possible
-    num_seeds = min(5, len(degree_list))
-    seeds = [nid for nid, _ in degree_list[:num_seeds]]
+    primary_seed = degree_list[0][0]
+    info = nodes.get(primary_seed, {})
+    print(f"    Primary seed: {info.get('name', '?')[:60]} "
+          f"(type={info.get('type','?')}, degree={len(adj_target[primary_seed])})")
 
-    print(f"    Top seed nodes by degree:")
-    for s in seeds[:5]:
-        info = nodes.get(s, {})
-        print(f"      {info.get('name', '?')[:60]} "
-              f"(type={info.get('type','?')}, degree={len(adj[s])})")
+    visited = set([primary_seed])
+    queue = deque([primary_seed])
 
-    # BFS expansion from seeds until we reach max_nodes
-    visited = set()
-    queue = deque()
+    while len(visited) < max_nodes:
+        if not queue:
+            # Current component exhausted — try next highest-degree unvisited node
+            next_seed = None
+            for nid, _ in degree_list:
+                if nid not in visited:
+                    next_seed = nid
+                    break
+            if next_seed is None:
+                break
+            info = nodes.get(next_seed, {})
+            print(f"    Adding seed (new component): {info.get('name', '?')[:50]} "
+                  f"(degree={len(adj_target[next_seed])})")
+            visited.add(next_seed)
+            queue.append(next_seed)
 
-    # Start BFS from all seeds
-    for s in seeds:
-        if s not in visited:
-            visited.add(s)
-            queue.append(s)
-
-    while queue and len(visited) < max_nodes:
         node = queue.popleft()
-        # Shuffle neighbors so we don't always expand in the same direction
-        neighbors = list(adj[node])
+        neighbors = list(adj_target[node])
         random.shuffle(neighbors)
         for neighbor in neighbors:
             if neighbor not in visited and len(visited) < max_nodes:
                 visited.add(neighbor)
                 queue.append(neighbor)
 
-    print(f"    BFS expansion reached {len(visited):,} nodes")
+    print(f"    BFS reached {len(visited):,} nodes")
 
-    # Collect ALL edges between visited nodes (this gives us cycles!)
+    # ---- Step 3: Collect direct edges between visited nodes ----
     sub_edges = []
     seen_edges = set()
-    for s, e in [(s, e) for s in visited for e in adj[s] if e in visited]:
-        ekey = (min(s, e), max(s, e))
-        if ekey not in seen_edges:
-            seen_edges.add(ekey)
-            rel_type = edge_lookup.get(ekey, "connected_to")
-            weight = compute_weight(rel_type, nodes.get(s, {}), nodes.get(e, {}))
-            sub_edges.append((s, e, weight, rel_type))
 
+    for s in visited:
+        for e in adj_target[s]:
+            if e in visited:
+                ekey = (min(s, e), max(s, e))
+                if ekey not in seen_edges:
+                    seen_edges.add(ekey)
+                    rel_type = edge_lookup.get(ekey, "connected_to")
+                    weight = compute_weight(rel_type, nodes.get(s, {}), nodes.get(e, {}))
+                    sub_edges.append((s, e, weight, rel_type))
+
+    direct_count = len(sub_edges)
+    print(f"    Direct edges in subgraph: {direct_count:,}")
+
+    # ---- Step 4: Add PROJECTION EDGES (bipartite projection) ----
+    # The ICIJ graph is bipartite: officers↔entities↔intermediaries.
+    # BFS expansion follows this tree structure, so direct edges alone
+    # give a tree-like graph. We need projection edges to create cycles.
+    #
+    # For EVERY node (visited or not) that connects to 2+ visited nodes,
+    # add edges between pairs of those visited neighbors. This creates
+    # triangles and dense clusters:
+    #   - Two officers sharing an entity get connected
+    #   - Two entities sharing an intermediary get connected
+    #   - Two entities sharing an officer get connected
+
+    print(f"    Computing projection edges (shared-neighbor links)...")
+
+    # Build mapping: hub_node → set of visited neighbors
+    # Include both visited and non-visited hubs
+    hub_to_visited_neighbors = defaultdict(set)
+
+    for start, end, rel_type, link in all_edges:
+        s_in = start in visited
+        e_in = end in visited
+        if s_in and e_in:
+            # Both visited: each is a hub for the other's neighbors
+            hub_to_visited_neighbors[start].add(end)
+            hub_to_visited_neighbors[end].add(start)
+        elif s_in:
+            # start visited, end is external bridge
+            hub_to_visited_neighbors[end].add(start)
+        elif e_in:
+            # end visited, start is external bridge
+            hub_to_visited_neighbors[start].add(end)
+
+    # Count hubs with 2+ visited neighbors
+    projectable = {h: vn for h, vn in hub_to_visited_neighbors.items()
+                   if len(vn) >= 2}
+    print(f"    Hubs with 2+ visited neighbors: {len(projectable):,}")
+
+    projection_count = 0
+    MAX_PAIRS_PER_HUB = 15  # Cap pairs per hub to avoid O(n²) from mega-hubs
+
+    for hub_node, visited_neighbors in projectable.items():
+        vn_list = list(visited_neighbors)
+        num_neighbors = len(vn_list)
+
+        # For very large hubs, sample neighbors to keep edge count manageable
+        if num_neighbors > 30:
+            vn_list = random.sample(vn_list, 30)
+
+        # Create pairs — cap total pairs per hub
+        pairs_added = 0
+        random.shuffle(vn_list)
+
+        for i in range(len(vn_list)):
+            if pairs_added >= MAX_PAIRS_PER_HUB:
+                break
+            for j in range(i + 1, len(vn_list)):
+                if pairs_added >= MAX_PAIRS_PER_HUB:
+                    break
+                s, e = vn_list[i], vn_list[j]
+                ekey = (min(s, e), max(s, e))
+                if ekey not in seen_edges:
+                    seen_edges.add(ekey)
+                    # Weight based on shared-neighbor count:
+                    #   Many shared neighbors → lower weight (stronger tie)
+                    #   Few shared neighbors → higher weight (weaker tie)
+                    # Range: 3.0 (very connected) to 6.0 (loosely connected)
+                    strength = min(num_neighbors, 20) / 20.0  # 0.0 to 1.0
+                    base = 6.0 - strength * 3.0  # 6.0 down to 3.0
+                    weight = base + random.random() * 0.01
+                    weight = round(weight, 4)
+                    sub_edges.append((s, e, weight, "shared_connection"))
+                    projection_count += 1
+                    pairs_added += 1
+
+    print(f"    Projection edges added: {projection_count:,}")
+
+    # ---- Step 5: Summary ----
     sub_nodes = {nid: nodes[nid] for nid in visited if nid in nodes}
 
-    print(f"    Subgraph: {len(sub_nodes):,} nodes, {len(sub_edges):,} edges")
+    total_edges = len(sub_edges)
+    print(f"    Final subgraph: {len(sub_nodes):,} nodes, {total_edges:,} edges")
     if len(sub_nodes) > 0:
-        density = len(sub_edges) / len(sub_nodes)
-        print(f"    Edge/node ratio: {density:.2f} "
-              f"({'good — has cycles' if density > 1.2 else 'sparse — may be tree-like'})")
+        ratio = total_edges / len(sub_nodes)
+        print(f"    Edge/node ratio: {ratio:.2f} "
+              f"(direct: {direct_count:,}, projected: {projection_count:,})")
+        if ratio < 1.5:
+            print(f"    Warning: ratio still low. Try a larger --max-nodes or "
+                  f"different filter.")
 
     return sub_nodes, sub_edges
 

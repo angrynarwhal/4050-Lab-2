@@ -104,22 +104,16 @@ class UnionFind:
         return self.size[self.find(x)]
 
     def get_max_height(self):
-        """Compute the maximum tree height in the Union-Find forest."""
-        heights = {}
-
-        def height(x):
-            if x in heights:
-                return heights[x]
-            if self.parent[x] == x:
-                heights[x] = 0
-                return 0
-            h = 1 + height(self.parent[x])
-            heights[x] = h
-            return h
-
+        """Compute the maximum tree height in the Union-Find forest (iterative)."""
         max_h = 0
         for i in range(len(self.parent)):
-            max_h = max(max_h, height(i))
+            h = 0
+            x = i
+            while self.parent[x] != x:
+                x = self.parent[x]
+                h += 1
+            if h > max_h:
+                max_h = h
         return max_h
 
     def get_stats(self):
