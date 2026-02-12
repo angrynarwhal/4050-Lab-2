@@ -175,10 +175,129 @@ def filter_by_jurisdiction(nodes, jurisdiction):
 
 
 def filter_by_country(nodes, country):
-    """Return set of node_ids where country_codes contains the country."""
-    country_lower = country.lower()
-    return {nid for nid, info in nodes.items()
-            if country_lower in info.get("country_codes", "").lower()}
+    """Return set of node_ids where country_codes contains the country.
+
+    Accepts either:
+      - ISO 3-letter codes: "GBR", "USA", "PAN"
+      - Full country names: "United Kingdom", "United States", "Panama"
+      - Partial matches: "United" will match "United Kingdom", "United States", etc.
+
+    The ICIJ data stores country_codes as semicolon-separated 3-letter ISO codes
+    (e.g., "GBR;USA").
+    """
+    # Common country name -> code mappings
+    COUNTRY_NAME_TO_CODES = {
+        "united kingdom": ["GBR"], "uk": ["GBR"], "great britain": ["GBR"],
+        "england": ["GBR"],
+        "united states": ["USA"], "us": ["USA"], "america": ["USA"],
+        "panama": ["PAN"],
+        "british virgin islands": ["VGB"], "bvi": ["VGB"],
+        "cayman islands": ["CYM"],
+        "bermuda": ["BMU"],
+        "bahamas": ["BHS"],
+        "hong kong": ["HKG"],
+        "china": ["CHN", "HKG"],
+        "switzerland": ["CHE"],
+        "luxembourg": ["LUX"],
+        "singapore": ["SGP"],
+        "jersey": ["JEY"],
+        "guernsey": ["GGY"],
+        "isle of man": ["IMN"],
+        "cyprus": ["CYP"],
+        "malta": ["MLT"],
+        "seychelles": ["SYC"],
+        "samoa": ["WSM"],
+        "cook islands": ["COK"],
+        "nevis": ["KNA"],
+        "barbados": ["BRB"],
+        "aruba": ["ABW"],
+        "canada": ["CAN"],
+        "australia": ["AUS"],
+        "germany": ["DEU"],
+        "france": ["FRA"],
+        "russia": ["RUS"],
+        "brazil": ["BRA"],
+        "india": ["IND"],
+        "japan": ["JPN"],
+        "south korea": ["KOR"],
+        "taiwan": ["TWN"],
+        "mexico": ["MEX"],
+        "spain": ["ESP"],
+        "italy": ["ITA"],
+        "netherlands": ["NLD"],
+        "sweden": ["SWE"],
+        "norway": ["NOR"],
+        "denmark": ["DNK"],
+        "ireland": ["IRL"],
+        "new zealand": ["NZL"],
+        "south africa": ["ZAF"],
+        "united arab emirates": ["ARE"], "uae": ["ARE"],
+        "saudi arabia": ["SAU"],
+        "israel": ["ISR"],
+        "argentina": ["ARG"],
+        "colombia": ["COL"],
+        "venezuela": ["VEN"],
+        "nigeria": ["NGA"],
+        "kenya": ["KEN"],
+        "egypt": ["EGY"],
+        "ukraine": ["UKR"],
+        "poland": ["POL"],
+        "czech republic": ["CZE"],
+        "austria": ["AUT"],
+        "belgium": ["BEL"],
+        "portugal": ["PRT"],
+        "greece": ["GRC"],
+        "turkey": ["TUR"],
+        "thailand": ["THA"],
+        "malaysia": ["MYS"],
+        "indonesia": ["IDN"],
+        "philippines": ["PHL"],
+        "vietnam": ["VNM"],
+        "chile": ["CHL"],
+        "peru": ["PER"],
+        "costa rica": ["CRI"],
+        "uruguay": ["URY"],
+        "ecuador": ["ECU"],
+        "liechtenstein": ["LIE"],
+        "monaco": ["MCO"],
+        "andorra": ["AND"],
+        "belize": ["BLZ"],
+    }
+
+    country_lower = country.lower().strip()
+
+    # Check if it's already a 3-letter code
+    if len(country_lower) == 3 and country_lower.isalpha():
+        target_codes = [country.upper()]
+    else:
+        # Try exact match in mapping
+        target_codes = COUNTRY_NAME_TO_CODES.get(country_lower)
+
+        if not target_codes:
+            # Try partial match in mapping keys
+            for name, codes in COUNTRY_NAME_TO_CODES.items():
+                if country_lower in name or name in country_lower:
+                    target_codes = codes
+                    break
+
+        if not target_codes:
+            # Fall back to substring search in the raw country_codes field
+            print(f"    Note: '{country}' not in country mapping, "
+                  f"trying substring match on country_codes field...")
+            return {nid for nid, info in nodes.items()
+                    if country_lower in info.get("country_codes", "").lower()}
+
+    print(f"    Resolved '{country}' to code(s): {target_codes}")
+
+    matched = set()
+    for nid, info in nodes.items():
+        cc = info.get("country_codes", "")
+        if cc:
+            node_codes = [c.strip().upper() for c in cc.split(";")]
+            if any(tc in node_codes for tc in target_codes):
+                matched.add(nid)
+
+    return matched
 
 
 def filter_by_intermediary(nodes, edges, intermediary_name):
@@ -235,63 +354,104 @@ def extract_largest_connected_component(node_ids, edge_list):
 
 
 def build_subgraph(nodes, all_edges, target_nodes, max_nodes, seed=42):
-    """Build a subgraph from target nodes, limited to max_nodes."""
+    """
+    Build a dense, connected subgraph using BFS expansion from high-degree seeds.
+
+    Strategy:
+      1. Build adjacency list from all edges restricted to target_nodes
+      2. Find highest-degree nodes as seeds (typically intermediaries)
+      3. BFS-expand from seeds until max_nodes is reached
+      4. Collect ALL edges between reached nodes (not just BFS tree edges)
+
+    This guarantees the result is connected and has many more edges than nodes
+    (i.e., contains cycles), which is essential for MST exercises.
+    """
     random.seed(seed)
 
-    if len(target_nodes) > max_nodes:
-        # Sample, but prioritize keeping diverse node types
-        by_type = defaultdict(list)
-        for nid in target_nodes:
-            if nid in nodes:
-                by_type[nodes[nid]["type"]].append(nid)
+    print(f"    Building adjacency list for {len(target_nodes):,} target nodes...")
 
-        sampled = set()
-        # Ensure representation of each type
-        for ntype, nids in by_type.items():
-            n_take = max(10, int(max_nodes * len(nids) / len(target_nodes)))
-            n_take = min(n_take, len(nids))
-            sampled.update(random.sample(nids, n_take))
+    # Build adjacency list restricted to target_nodes
+    # Store full edge info for later weight computation
+    adj = defaultdict(set)
+    edge_lookup = {}  # (min_id, max_id) -> rel_type
+    target_set = set(target_nodes)
 
-        # Fill remaining from full set
-        remaining = list(target_nodes - sampled)
-        random.shuffle(remaining)
-        needed = max_nodes - len(sampled)
-        if needed > 0:
-            sampled.update(remaining[:needed])
-
-        target_nodes = sampled
-
-    # Filter edges to those within target nodes
-    sub_edges = []
     for start, end, rel_type, link in all_edges:
-        if start in target_nodes and end in target_nodes and start in nodes and end in nodes:
-            weight = compute_weight(rel_type, nodes[start], nodes[end])
-            sub_edges.append((start, end, weight, rel_type))
+        if start in target_set and end in target_set:
+            if start != end:  # skip self-loops
+                adj[start].add(end)
+                adj[end].add(start)
+                ekey = (min(start, end), max(start, end))
+                # Keep the first rel_type we see for each edge pair
+                if ekey not in edge_lookup:
+                    edge_lookup[ekey] = rel_type
 
-    # Extract largest connected component
-    edge_tuples = [(s, e, rt, lk) for s, e, rt, lk in
-                   [(s, e, rt, "") for s, e, _, rt in sub_edges]]
-    lcc = extract_largest_connected_component(target_nodes, edge_tuples)
+    # Count how many target nodes actually have edges
+    nodes_with_edges = {n for n in target_set if len(adj[n]) > 0}
+    print(f"    Nodes with edges in target set: {len(nodes_with_edges):,}")
+    print(f"    Edges in target set: {len(edge_lookup):,}")
 
-    if len(lcc) < len(target_nodes):
-        print(f"    Note: Extracted largest connected component ({len(lcc):,} of {len(target_nodes):,} nodes)")
+    if len(nodes_with_edges) == 0:
+        print("    Warning: No edges found among target nodes.")
+        return {}, []
 
-    # Filter to LCC
-    sub_edges = [(s, e, w, rt) for s, e, w, rt in sub_edges if s in lcc and e in lcc]
-    sub_nodes = {nid: nodes[nid] for nid in lcc if nid in nodes}
+    # Find seed nodes: highest degree nodes in the target set
+    # Prefer intermediaries as they tend to be hubs connecting many entities
+    degree_list = [(nid, len(adj[nid])) for nid in nodes_with_edges]
+    degree_list.sort(key=lambda x: -x[1])
 
-    # Remove self-loops and duplicate edges
-    seen = set()
-    clean_edges = []
-    for s, e, w, rt in sub_edges:
-        if s == e:
-            continue
-        edge_key = (min(s, e), max(s, e))
-        if edge_key not in seen:
-            seen.add(edge_key)
-            clean_edges.append((s, e, w, rt))
+    # Pick top seeds, mixing types if possible
+    num_seeds = min(5, len(degree_list))
+    seeds = [nid for nid, _ in degree_list[:num_seeds]]
 
-    return sub_nodes, clean_edges
+    print(f"    Top seed nodes by degree:")
+    for s in seeds[:5]:
+        info = nodes.get(s, {})
+        print(f"      {info.get('name', '?')[:60]} "
+              f"(type={info.get('type','?')}, degree={len(adj[s])})")
+
+    # BFS expansion from seeds until we reach max_nodes
+    visited = set()
+    queue = deque()
+
+    # Start BFS from all seeds
+    for s in seeds:
+        if s not in visited:
+            visited.add(s)
+            queue.append(s)
+
+    while queue and len(visited) < max_nodes:
+        node = queue.popleft()
+        # Shuffle neighbors so we don't always expand in the same direction
+        neighbors = list(adj[node])
+        random.shuffle(neighbors)
+        for neighbor in neighbors:
+            if neighbor not in visited and len(visited) < max_nodes:
+                visited.add(neighbor)
+                queue.append(neighbor)
+
+    print(f"    BFS expansion reached {len(visited):,} nodes")
+
+    # Collect ALL edges between visited nodes (this gives us cycles!)
+    sub_edges = []
+    seen_edges = set()
+    for s, e in [(s, e) for s in visited for e in adj[s] if e in visited]:
+        ekey = (min(s, e), max(s, e))
+        if ekey not in seen_edges:
+            seen_edges.add(ekey)
+            rel_type = edge_lookup.get(ekey, "connected_to")
+            weight = compute_weight(rel_type, nodes.get(s, {}), nodes.get(e, {}))
+            sub_edges.append((s, e, weight, rel_type))
+
+    sub_nodes = {nid: nodes[nid] for nid in visited if nid in nodes}
+
+    print(f"    Subgraph: {len(sub_nodes):,} nodes, {len(sub_edges):,} edges")
+    if len(sub_nodes) > 0:
+        density = len(sub_edges) / len(sub_nodes)
+        print(f"    Edge/node ratio: {density:.2f} "
+              f"({'good — has cycles' if density > 1.2 else 'sparse — may be tree-like'})")
+
+    return sub_nodes, sub_edges
 
 
 def remap_ids(sub_nodes, sub_edges):
@@ -383,7 +543,8 @@ def main():
     filter_group.add_argument("--jurisdiction", type=str, default=None,
                               help="Filter by jurisdiction (e.g., 'Panama', 'British Virgin Islands')")
     filter_group.add_argument("--country", type=str, default=None,
-                              help="Filter by country code or name (e.g., 'GBR', 'United Kingdom')")
+                              help="Filter by country name or ISO code "
+                                   "(e.g., 'GBR', 'United Kingdom', 'USA', 'Panama')")
     filter_group.add_argument("--intermediary", type=str, default=None,
                               help="Filter by intermediary name (e.g., 'Mossack Fonseca')")
     filter_group.add_argument("--source", type=str, default=None,
@@ -412,27 +573,50 @@ def main():
 
     if args.jurisdiction:
         jur_nodes = filter_by_jurisdiction(nodes, args.jurisdiction)
-        # Also include nodes connected to jurisdiction-filtered nodes
-        connected = set()
+        # Expand to 2-hop neighborhood so the target pool has internal edges
+        # (Officers connect to entities; entities connect to intermediaries;
+        #  2 hops captures officer→entity→intermediary triangles)
+        connected_1hop = set()
         for s, e, _, _ in all_edges:
             if s in jur_nodes:
-                connected.add(e)
+                connected_1hop.add(e)
             if e in jur_nodes:
-                connected.add(s)
-        target_nodes = jur_nodes | (connected & set(nodes.keys()))
-        print(f"\n  Jurisdiction filter '{args.jurisdiction}': {len(target_nodes):,} nodes")
+                connected_1hop.add(s)
+        connected_1hop = connected_1hop & set(nodes.keys())
+
+        connected_2hop = set()
+        for s, e, _, _ in all_edges:
+            if s in connected_1hop and e in nodes:
+                connected_2hop.add(e)
+            if e in connected_1hop and s in nodes:
+                connected_2hop.add(s)
+
+        target_nodes = jur_nodes | connected_1hop | connected_2hop
+        print(f"\n  Jurisdiction filter '{args.jurisdiction}': "
+              f"{len(jur_nodes):,} direct + {len(target_nodes)-len(jur_nodes):,} "
+              f"neighbors = {len(target_nodes):,} nodes")
 
     if args.country:
         country_nodes = filter_by_country(nodes, args.country)
-        connected = set()
+        # 2-hop expansion
+        connected_1hop = set()
         for s, e, _, _ in all_edges:
-            if s in country_nodes:
-                connected.add(e)
-            if e in country_nodes:
-                connected.add(s)
-        country_expanded = country_nodes | (connected & set(nodes.keys()))
+            if s in country_nodes and e in nodes:
+                connected_1hop.add(e)
+            if e in country_nodes and s in nodes:
+                connected_1hop.add(s)
+
+        connected_2hop = set()
+        for s, e, _, _ in all_edges:
+            if s in connected_1hop and e in nodes:
+                connected_2hop.add(e)
+            if e in connected_1hop and s in nodes:
+                connected_2hop.add(s)
+
+        country_expanded = country_nodes | connected_1hop | connected_2hop
         target_nodes = target_nodes & country_expanded if args.jurisdiction else country_expanded
-        print(f"  Country filter '{args.country}': {len(target_nodes):,} nodes")
+        print(f"  Country filter '{args.country}': "
+              f"{len(country_nodes):,} direct, {len(target_nodes):,} with expansion")
 
     if args.intermediary:
         int_nodes = filter_by_intermediary(nodes, all_edges, args.intermediary)

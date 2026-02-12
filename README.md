@@ -18,7 +18,7 @@ The ICIJ data is a graph: **entities** (offshore companies), **officers** (peopl
 
 The Panama Papers represent one of the largest data leaks in history — 11.5 million documents exposing a global network of offshore shell companies. The underlying data is *inherently a graph problem*: people connect to companies through intermediaries across jurisdictions. Minimum spanning trees and clustering can reveal the most critical connections and community structure in these networks.
 
-There are legitimate uses for offshore companies and trusts.  We use this data purely as a real-world graph for algorithmic exploration. **Standard Disclaimer from Goggins: The inclusion of a person or entity in the ICIJ Offshore Leaks Database is not intended to suggest or imply that they have engaged in illegal or improper conduct.**
+There are legitimate uses for offshore companies and trusts. **The inclusion of a person or entity in the ICIJ Offshore Leaks Database is not intended to suggest or imply that they have engaged in illegal or improper conduct.** We use this data purely as a real-world graph for algorithmic exploration.
 
 ## Learning Objectives
 
@@ -77,7 +77,8 @@ python3 download_data.py
 python3 build_graph.py --jurisdiction "Panama" --max-nodes 1000 --output tiny
 python3 build_graph.py --jurisdiction "Panama" --max-nodes 5000 --output small
 python3 build_graph.py --jurisdiction "Panama" --max-nodes 20000 --output medium
-python3 build_graph.py --country "United Kingdom" --max-nodes 5000 --output uk_small
+python3 build_graph.py --country "GBR" --max-nodes 5000 --output uk_small
+# Or equivalently: --country "United Kingdom"
 
 # 2. Run MST experiments
 cd ../python
