@@ -260,9 +260,6 @@ make
 ./mst ../data/small_nodes.csv ../data/small_edges.csv --compare
 ./mst ../data/medium_nodes.csv ../data/medium_edges.csv --compare
 
-# Exercise 5: Union-Find modes (unchanged)
-./mst ../data/small_nodes.csv ../data/small_edges.csv --instrument
-
 # Individual runs
 ./mst ../data/medium_nodes.csv ../data/medium_edges.csv --kruskal
 ./mst ../data/medium_nodes.csv ../data/medium_edges.csv --prim
@@ -371,6 +368,7 @@ The C implementation includes instrumented Union-Find. Run Kruskal's and observe
 ```bash
 cd c
 make
+# Exercise 5: Union-Find modes (unchanged)
 ./mst ../data/small_nodes.csv ../data/small_edges.csv --instrument
 ```
 
