@@ -445,10 +445,10 @@ def build_subgraph(nodes, all_edges, target_nodes, max_nodes, seed=42):
         print(f"      {info.get('name', '?')[:55]} "
               f"(type={info.get('type','?')}, degree={len(adj_target[c])})")
 
-    # ---- Step 3: Round-robin BFS expansion ----
-    # Each community gets its own BFS queue. We expand one level from
-    # each in turn, so communities grow at similar rates.
-    # Nodes can only belong to the community that reaches them first.
+    # ---- Step 3: Budget-capped round-robin BFS expansion ----
+    # Each community gets a per-round budget of new nodes it can claim.
+    # This prevents a mega-hub (degree 7016) from grabbing the entire
+    # node budget in round 1 while other communities get nothing.
     visited = set()
     community_of = {}  # node_id → community_index (for weight calc later)
     queues = []
@@ -458,27 +458,46 @@ def build_subgraph(nodes, all_edges, target_nodes, max_nodes, seed=42):
         community_of[c] = i
         queues.append(deque([c]))
 
+    # Per-round budget: each community can claim at most this many NEW nodes
+    # per round. Set conservatively so K communities × budget ≈ max_nodes
+    # over ~5 rounds, giving balanced growth.
+    per_round_cap = max(10, max_nodes // K // 3)
+    print(f"    Per-community round budget: {per_round_cap}")
+
     rounds = 0
     while len(visited) < max_nodes and any(queues):
         rounds += 1
         for i in range(K):
             if not queues[i]:
                 continue
-            # Expand one "level" from this community
-            next_level = []
-            level_size = len(queues[i])
-            for _ in range(level_size):
-                if not queues[i]:
-                    break
+            # Expand from this community, up to per_round_cap new nodes
+            claimed = 0
+            next_queue = deque()
+
+            while queues[i] and claimed < per_round_cap and len(visited) < max_nodes:
                 node = queues[i].popleft()
                 neighbors = list(adj_target[node])
                 random.shuffle(neighbors)
                 for neighbor in neighbors:
                     if neighbor not in visited and len(visited) < max_nodes:
-                        visited.add(neighbor)
-                        community_of[neighbor] = i
-                        next_level.append(neighbor)
-            queues[i] = deque(next_level)
+                        if claimed < per_round_cap:
+                            visited.add(neighbor)
+                            community_of[neighbor] = i
+                            next_queue.append(neighbor)
+                            claimed += 1
+                        # If budget exhausted, stop expanding this node's
+                        # neighbors — but keep the node in queue for next round
+                        else:
+                            break
+                else:
+                    # Node fully expanded, don't re-queue it
+                    continue
+                # Node partially expanded — put it back for next round
+                queues[i].appendleft(node)
+                break
+
+            # Merge new frontier into this community's queue
+            queues[i].extend(next_queue)
 
     # Community size report
     comm_sizes = defaultdict(int)
