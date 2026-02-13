@@ -54,12 +54,13 @@ int uf_find(UnionFind *uf, int x) {
             root = uf->parent[root];
             path_len++;
         }
-        /* Second pass: compress */
+        /* Second pass: compress — point every node on path directly to root */
         while (uf->parent[x] != root) {
             int next = uf->parent[x];
             uf->parent[x] = root;
             x = next;
         }
+        x = root;  /* Return the actual root, not the last compressed node */
     } else {
         /* No compression: just follow pointers */
         while (uf->parent[x] != x) {

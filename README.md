@@ -80,11 +80,24 @@ python3 build_graph.py --jurisdiction "Panama" --max-nodes 20000 --output medium
 python3 build_graph.py --country "GBR" --max-nodes 5000 --output uk_small
 # Or equivalently: --country "United Kingdom"
 
-# 2. Run MST experiments
+# For the C implementation — larger datasets needed for meaningful timing:
+python3 build_graph.py --jurisdiction "Panama" --max-nodes 50000 --output large
+python3 build_graph.py --max-nodes 200000 --output xlarge
+python3 build_graph.py --max-nodes 500000 --output huge
+
+# 2. Run Python MST experiments
 cd ../python
 python3 run_experiments.py
 
-# 3. Or run individual components
+# 3. Run C MST experiments (Exercise 1 comparison, Exercise 5 Union-Find)
+cd ../c
+make
+./mst ../data/large_nodes.csv ../data/large_edges.csv --compare --iterations 10
+./mst ../data/xlarge_nodes.csv ../data/xlarge_edges.csv --compare --iterations 5
+./mst ../data/large_nodes.csv ../data/large_edges.csv --instrument --iterations 5
+
+# 4. Or run individual Python components
+cd ../python
 python3 mst_algorithms.py ../data/tiny_nodes.csv ../data/tiny_edges.csv --algorithm kruskal
 python3 mst_algorithms.py ../data/tiny_nodes.csv ../data/tiny_edges.csv --algorithm prim
 python3 clustering.py ../data/small_nodes.csv ../data/small_edges.csv --clusters 5
@@ -92,13 +105,17 @@ python3 clustering.py ../data/small_nodes.csv ../data/small_edges.csv --clusters
 
 ## Network Sizes and Expected Behavior
 
-| Size | Nodes | Edges | MST Behavior |
-|------|-------|-------|--------------|
-| tiny | ~1,000 | ~2,000 | Both algorithms fast, good for debugging and visualization |
-| small | ~5,000 | ~12,000 | Noticeable difference between Prim's and Kruskal's |
-| medium | ~20,000 | ~50,000 | Sort cost in Kruskal's becomes visible; Prim's with binary heap competitive |
-| large | ~50,000 | ~120,000 | Performance differences clear; clustering reveals jurisdictional communities |
+| Size | Nodes | Edges | Best For |
+|------|-------|-------|----------|
+| tiny | ~1,000 | ~2,000 | Debugging, visualization, verifying correctness |
+| small | ~5,000 | ~12,000 | Python experiments — all exercises run in seconds |
+| medium | ~20,000 | ~50,000 | Python timing — sort cost visible in Kruskal's |
+| large | ~50,000 | ~120,000 | C timing — Kruskal vs Prim differences measurable |
+| xlarge | ~200,000 | ~500,000 | C timing — clear algorithmic scaling differences |
+| huge | ~500,000 | ~1,200,000 | C timing — dramatic scaling with `--iterations` |
 | uk_small | ~5,000 | ~10,000 | Country-filtered subgraph for comparative analysis |
+
+**Note:** When `--max-nodes` >= 100,000 and no filter is specified, `build_graph.py` uses the entire ICIJ database (~800K nodes across Panama Papers, Paradise Papers, Pandora Papers, etc.) instead of just the Panama Papers subset. The xlarge and huge datasets draw from this full pool.
 
 ## Repository Structure
 
@@ -252,20 +269,6 @@ PRIM(G, start):
 
 ### Exercise 1: MST Construction and Comparison
 
-```bash
-cd c
-make
-
-# Exercise 1: Kruskal vs Prim side-by-side
-./mst ../data/small_nodes.csv ../data/small_edges.csv --compare
-./mst ../data/medium_nodes.csv ../data/medium_edges.csv --compare
-
-# Individual runs
-./mst ../data/medium_nodes.csv ../data/medium_edges.csv --kruskal
-./mst ../data/medium_nodes.csv ../data/medium_edges.csv --prim
-
-```
-
 Run both algorithms on progressively larger Panama Papers subgraphs:
 
 | Network | Nodes | Edges | Kruskal Time | Prim Time | MST Weight |
@@ -368,7 +371,6 @@ The C implementation includes instrumented Union-Find. Run Kruskal's and observe
 ```bash
 cd c
 make
-# Exercise 5: Union-Find modes (unchanged)
 ./mst ../data/small_nodes.csv ../data/small_edges.csv --instrument
 ```
 

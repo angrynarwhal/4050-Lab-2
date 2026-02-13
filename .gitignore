@@ -1,3 +1,4 @@
+*.o
 data/raw
 **.csv
 data/**/*.csv
