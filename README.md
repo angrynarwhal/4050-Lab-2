@@ -300,7 +300,7 @@ This will:
 
 **Run this 10 times and record your results:**
 
-| Trial | Cut Size (|S|) | Crossing Edges | Min Crossing Edge Weight | In MST? |
+| Trial | Cut Size (S) | Crossing Edges | Min Crossing Edge Weight | In MST? |
 |-------|---------------|----------------|-------------------------|---------|
 | 1     |               |                |                         |         |
 | 2     |               |                |                         |         |
