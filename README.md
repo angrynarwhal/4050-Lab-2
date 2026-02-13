@@ -1,8 +1,8 @@
 # CS4050 Lab 2: Minimum Spanning Trees, Cut Properties, and Clustering with the Panama Papers
 ![GitHub Latest Pre-Release)](https://img.shields.io/github/v/release/angrynarwhal/4050-Lab-1?include_prereleases&label=pre-release&logo=github)  
-
+ 
 Place all of your submission documents in the [./lab2_submission](lab2_submission) folder. You will submit a zip file of that directory in Canvas.
-
+---------------------
 ## Overview
 
 This lab explores **Minimum Spanning Trees (MSTs)**, the **Red Rule**, the **Blue Rule**, and **graph-based clustering** using real-world data from the [ICIJ Offshore Leaks Database](https://offshoreleaks.icij.org/) — the dataset behind the Panama Papers, Paradise Papers, and Pandora Papers investigations.
